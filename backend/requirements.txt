@@ -1,0 +1,39 @@
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+websockets==14.1
+
+# Database
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+greenlet==3.1.1
+
+# Upbit API
+pyupbit==0.2.33
+
+# Google Gemini AI
+google-generativeai==0.8.4
+
+# Data Processing
+pandas==2.2.3
+numpy==2.2.1
+
+# HTTP Client
+httpx==0.28.1
+aiohttp==3.11.11
+
+# RSS Feed Parsing
+feedparser==6.0.11
+
+# Scheduling
+apscheduler==3.10.4
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# Markdown
+markdown==3.7
+
+# Utilities
+pydantic==2.10.4
+pydantic-settings==2.7.1
