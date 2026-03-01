@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getSettings, updateSettings, testConnection } from '../../services/api'
+import { getSettings, updateSettings, testConnection, toggleNewsMonitor, toggleTwitterMonitor } from '../../services/api'
 import type { Settings } from '../../types'
 
 interface ConnectionResult {
@@ -28,20 +28,56 @@ interface ConnectionResult {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
-  const [newsInterval, setNewsInterval] = useState(5)
+  const [newsInterval, setNewsInterval] = useState(30)
   const [twitterAccounts, setTwitterAccounts] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [connectionResult, setConnectionResult] = useState<ConnectionResult | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [newsMonitorOn, setNewsMonitorOn] = useState(false)
+  const [twitterMonitorOn, setTwitterMonitorOn] = useState(false)
+  const [togglingNews, setTogglingNews] = useState(false)
+  const [togglingTwitter, setTogglingTwitter] = useState(false)
 
-  useEffect(() => {
+  const fetchSettings = () => {
     getSettings().then((res) => {
       setSettings(res.data)
-      setNewsInterval(res.data.news_interval_minutes || 5)
+      setNewsInterval(res.data.news_interval_seconds || 30)
       setTwitterAccounts((res.data.twitter_accounts || []).join(', '))
+      setNewsMonitorOn(res.data.news_monitor_running ?? false)
+      setTwitterMonitorOn(res.data.twitter_monitor_running ?? false)
     }).catch(() => {})
+  }
+
+  useEffect(() => {
+    fetchSettings()
   }, [])
+
+  const handleSetNews = async (enabled: boolean) => {
+    if (enabled === newsMonitorOn) return
+    setTogglingNews(true)
+    try {
+      await toggleNewsMonitor(enabled)
+      setNewsMonitorOn(enabled)
+    } catch {
+      setMessage({ type: 'error', text: '뉴스 모니터 전환 실패' })
+    } finally {
+      setTogglingNews(false)
+    }
+  }
+
+  const handleSetTwitter = async (enabled: boolean) => {
+    if (enabled === twitterMonitorOn) return
+    setTogglingTwitter(true)
+    try {
+      await toggleTwitterMonitor(enabled)
+      setTwitterMonitorOn(enabled)
+    } catch {
+      setMessage({ type: 'error', text: '트위터 모니터 전환 실패' })
+    } finally {
+      setTogglingTwitter(false)
+    }
+  }
 
   const handleTestConnection = async () => {
     setTesting(true)
@@ -65,7 +101,7 @@ export default function SettingsPage() {
         .map((a) => a.trim())
         .filter(Boolean)
       await updateSettings({
-        news_interval_minutes: newsInterval,
+        news_interval_seconds: newsInterval,
         twitter_accounts: accounts,
       })
       setMessage({ type: 'success', text: '설정이 저장되었습니다.' })
@@ -209,20 +245,23 @@ export default function SettingsPage() {
 
       {/* 뉴스 모니터링 설정 */}
       <div className="card">
-        <h3 className="text-lg font-semibold mb-4">뉴스 모니터링</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">뉴스 모니터링</h3>
+          <ToggleSwitch on={newsMonitorOn} toggling={togglingNews} onSet={handleSetNews} />
+        </div>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">검색 간격 (분)</label>
+            <label className="block text-sm text-gray-400 mb-1">검색 간격 (초)</label>
             <input
               type="number"
               value={newsInterval}
-              onChange={(e) => setNewsInterval(parseInt(e.target.value) || 5)}
-              min={1}
-              max={60}
+              onChange={(e) => setNewsInterval(parseInt(e.target.value) || 30)}
+              min={10}
+              max={3600}
               className="input-field w-full"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Gemini API를 통해 뉴스를 검색하는 간격입니다. (기본: 5분)
+              Gemini API를 통해 뉴스를 검색하는 간격입니다. (기본: 30초)
             </p>
           </div>
         </div>
@@ -230,7 +269,10 @@ export default function SettingsPage() {
 
       {/* 트위터 모니터링 설정 */}
       <div className="card">
-        <h3 className="text-lg font-semibold mb-4">트위터(X) 모니터링</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">트위터(X) 모니터링</h3>
+          <ToggleSwitch on={twitterMonitorOn} toggling={togglingTwitter} onSet={handleSetTwitter} />
+        </div>
         <div className="space-y-4">
           <div>
             <label className="block text-sm text-gray-400 mb-1">감시 계정 (쉼표로 구분)</label>
@@ -268,6 +310,30 @@ function StatusRow({ label, ok }: { label: string; ok: boolean }) {
       <span className={`ml-auto text-xs ${ok ? 'text-emerald-400' : 'text-red-400'}`}>
         {ok ? '정상' : '실패'}
       </span>
+    </div>
+  )
+}
+
+function ToggleSwitch({ on, toggling, onSet }: { on: boolean; toggling: boolean; onSet: (v: boolean) => void }) {
+  if (toggling) return <span className="text-sm text-gray-400">전환 중...</span>
+  return (
+    <div className="flex rounded-lg overflow-hidden border border-gray-600">
+      <button
+        onClick={() => onSet(true)}
+        className={`px-3 py-1 text-sm font-medium transition-colors ${
+          on ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }`}
+      >
+        ON
+      </button>
+      <button
+        onClick={() => onSet(false)}
+        className={`px-3 py-1 text-sm font-medium transition-colors ${
+          !on ? 'bg-red-600/80 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }`}
+      >
+        OFF
+      </button>
     </div>
   )
 }

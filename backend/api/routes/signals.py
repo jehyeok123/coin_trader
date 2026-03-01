@@ -30,15 +30,27 @@ async def get_signals(
 
 
 @router.get("/latest")
-async def get_latest_signals():
-    """뉴스/트위터 모니터의 최신 시그널 조회"""
-    from backend.main import get_scheduler
-    scheduler = get_scheduler()
-    if scheduler is None:
-        return {"news": [], "twitter": []}
+async def get_latest_signals(db: AsyncSession = Depends(get_db)):
+    """뉴스/트위터 최신 시그널 조회 (DB 기반, 각 최대 5개)"""
+    news_query = (
+        select(SignalLog)
+        .where(SignalLog.source == "news")
+        .order_by(desc(SignalLog.created_at))
+        .limit(5)
+    )
+    twitter_query = (
+        select(SignalLog)
+        .where(SignalLog.source == "twitter")
+        .order_by(desc(SignalLog.created_at))
+        .limit(5)
+    )
+
+    news_result = await db.execute(news_query)
+    twitter_result = await db.execute(twitter_query)
+
     return {
-        "news": [s.to_dict() for s in scheduler.news_monitor.last_signals],
-        "twitter": [s.to_dict() for s in scheduler.twitter_monitor.last_signals],
+        "news": [s.to_dict() for s in news_result.scalars().all()],
+        "twitter": [s.to_dict() for s in twitter_result.scalars().all()],
     }
 
 

@@ -7,9 +7,13 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 
 
 class SettingsUpdate(BaseModel):
-    news_interval_minutes: int | None = None
+    news_interval_seconds: int | None = None
     twitter_accounts: list[str] | None = None
     twitter_interval_seconds: int | None = None
+
+
+class MonitorToggle(BaseModel):
+    enabled: bool
 
 
 @router.get("")
@@ -30,11 +34,35 @@ async def get_settings():
         "upbit_connected": bool(settings.upbit_access_key),
         "gemini_connected": bool(settings.gemini_api_key),
         "gemini_model": gemini_model,
-        "news_interval_minutes": settings.news_check_interval_minutes,
+        "news_interval_seconds": settings.news_check_interval_seconds,
         "twitter_accounts": settings.twitter_accounts,
         "twitter_interval_seconds": settings.twitter_check_interval_seconds,
+        "news_monitor_running": scheduler_status.get("news_monitor", {}).get("running", False) if scheduler_status else False,
+        "twitter_monitor_running": scheduler_status.get("twitter_monitor", {}).get("running", False) if scheduler_status else False,
         "system_status": scheduler_status,
     }
+
+
+@router.post("/toggle-news-monitor")
+async def toggle_news_monitor(body: MonitorToggle):
+    """뉴스 모니터 on/off"""
+    from backend.main import get_scheduler
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return {"success": False, "message": "스케줄러가 초기화되지 않았습니다."}
+    await scheduler.toggle_news_monitor(body.enabled)
+    return {"success": True, "enabled": body.enabled}
+
+
+@router.post("/toggle-twitter-monitor")
+async def toggle_twitter_monitor(body: MonitorToggle):
+    """트위터 모니터 on/off"""
+    from backend.main import get_scheduler
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return {"success": False, "message": "스케줄러가 초기화되지 않았습니다."}
+    await scheduler.toggle_twitter_monitor(body.enabled)
+    return {"success": True, "enabled": body.enabled}
 
 
 @router.get("/test-connection")
@@ -163,9 +191,9 @@ async def update_settings(body: SettingsUpdate):
 
     updated = []
 
-    if body.news_interval_minutes is not None and scheduler:
-        scheduler.set_news_interval(body.news_interval_minutes)
-        updated.append(f"뉴스 간격: {body.news_interval_minutes}분")
+    if body.news_interval_seconds is not None and scheduler:
+        scheduler.set_news_interval(body.news_interval_seconds)
+        updated.append(f"뉴스 간격: {body.news_interval_seconds}초")
 
     if body.twitter_accounts is not None and scheduler:
         scheduler.set_twitter_accounts(body.twitter_accounts)

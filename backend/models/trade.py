@@ -20,6 +20,7 @@ class Trade(Base):
     status: Mapped[str] = mapped_column(String(20), default="completed")
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     signal_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    fee_krw: Mapped[float | None] = mapped_column(Float, nullable=True)
     pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
     pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -37,9 +38,10 @@ class Trade(Base):
             "status": self.status,
             "reason": self.reason,
             "signal_source": self.signal_source,
+            "fee_krw": self.fee_krw,
             "pnl": self.pnl,
             "pnl_pct": self.pnl_pct,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
         }
 
     def to_markdown(self) -> str:

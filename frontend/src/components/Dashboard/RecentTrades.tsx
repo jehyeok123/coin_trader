@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { getTradeHistory } from '../../services/api'
 import type { Trade } from '../../types'
 
+function formatSeoulTime(isoString: string): string {
+  const date = new Date(isoString)
+  return date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+}
+
 export default function RecentTrades() {
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,13 +46,19 @@ export default function RecentTrades() {
                 <div>
                   <p className="font-mono text-sm">{trade.symbol}</p>
                   <p className="text-xs text-gray-500">
-                    {new Date(trade.created_at).toLocaleString('ko-KR')}
+                    {formatSeoulTime(trade.created_at)}
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium">
                   {trade.amount_krw.toLocaleString()} KRW
+                </p>
+                <p className="text-xs text-gray-400">
+                  {trade.side === 'buy' ? '매수가' : '매도가'} {trade.price.toLocaleString()} 원
+                  {trade.side === 'buy' && trade.sell_price != null && (
+                    <> · 매도가 {trade.sell_price.toLocaleString()} 원</>
+                  )}
                 </p>
                 {trade.pnl_pct != null && (
                   <p className={`text-xs font-semibold ${trade.pnl_pct >= 0 ? 'text-profit' : 'text-loss'}`}>

@@ -23,7 +23,10 @@ class Signal:
     action: str  # "buy", "sell", "hold"
     symbol: str | None = None
     confidence: float = 0.0  # 0.0 ~ 1.0
+    score: int = 0  # Gemini 키워드 점수 (-5 ~ +5), 0 = 미산출
+    scope: str = "ticker"  # "ticker" (개별 코인) or "macro" (거시경제)
     summary: str = ""
+    url: str = ""  # 원문 링크
     raw_data: str = ""
     created_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -34,6 +37,7 @@ class Signal:
             "symbol": self.symbol,
             "confidence": self.confidence,
             "summary": self.summary,
+            "url": self.url,
             "created_at": self.created_at.isoformat(),
         }
 

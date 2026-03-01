@@ -14,8 +14,9 @@ export default function Sidebar() {
   return (
     <aside className="w-56 bg-gray-800 border-r border-gray-700 flex flex-col">
       <div className="p-4 border-b border-gray-700">
-        <div className="text-2xl font-bold text-center">
-          <span className="text-primary-400">CT</span>
+        <div className="flex items-center justify-center gap-2">
+          <img src="/favicon.svg" alt="PT" className="w-8 h-8" />
+          <span className="text-2xl font-bold text-primary-400">PT</span>
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-1">

@@ -13,6 +13,8 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 from backend.models.database import init_db
+import backend.models.trade  # noqa: F401 - ensure tables are registered
+import backend.models.signal  # noqa: F401 - ensure tables are registered
 from backend.api.routes import api_router
 from backend.api.websocket import websocket_endpoint, ws_manager, price_ticker_loop
 from backend.brokers.upbit import UpbitBroker

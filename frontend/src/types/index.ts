@@ -10,8 +10,12 @@ export interface Trade {
   status: string
   reason: string | null
   signal_source: string | null
+  fee_krw: number | null
   pnl: number | null
   pnl_pct: number | null
+  current_price?: number
+  sell_price?: number
+  sell_amount?: number
   created_at: string
 }
 
@@ -24,6 +28,20 @@ export interface Position {
   pnl_pct: number
 }
 
+export interface BotPosition {
+  symbol: string
+  bot_quantity: number
+  bot_avg_price: number
+  current_price: number
+  bot_pnl: number
+  bot_pnl_pct: number
+  bot_value: number
+  entry_source: string
+  original_quantity: number
+  first_tp_done: boolean
+  peak_pnl_pct: number
+}
+
 export interface Signal {
   id?: number
   source: string
@@ -31,6 +49,7 @@ export interface Signal {
   symbol: string | null
   confidence: number
   summary: string
+  url?: string
   acted_on?: boolean
   created_at: string
 }
@@ -48,29 +67,96 @@ export interface TradingRules {
   version: string
   description: string
   trading: {
-    stop_loss_pct: number
-    take_profit_pct: number
-    trailing_stop_pct: number
     max_position_size_pct: number
     max_concurrent_positions: number
     min_order_amount_krw: number
     cooldown_seconds: number
+    position_check_interval_seconds: number
     sell_lock_before_date: string
   }
-  indicators: Record<string, Record<string, unknown>>
+  target_coins: {
+    top_n: number
+    refresh_interval_seconds: number
+  }
+  technical_strategy: {
+    candle_interval: string
+    candle_count: number
+    entry: {
+      ema_long: number
+      ema_short: number
+      rsi_period: number
+      rsi_min: number
+      rsi_max: number
+    }
+    exit: {
+      stop_loss_pct: number
+      tp1_pct: number
+      tp1_sell_ratio: number
+      moonbag_trail_pct: number
+    }
+  }
+  event_strategy: {
+    buy_score_threshold: number
+    sell_score_threshold: number
+    non_target_buy_score_threshold: number
+    non_target_sell_score_threshold: number
+    buy_position_size_pct: number
+    exit: {
+      stop_loss_pct: number
+      tp1_pct: number
+      tp1_sell_ratio: number
+      moonbag_trail_pct: number
+    }
+  }
+  macro_strategy: {
+    buy_score_threshold: number
+    sell_score_threshold: number
+    buy_position_size_pct: number
+    buy_symbol: string
+    pause_duration_seconds: number
+  }
   filters: {
-    min_volume_24h_krw: number
     min_price_krw: number
     blacklist: string[]
     whitelist: string[]
   }
-  signal_weights: Record<string, number>
-  interrupt: {
-    enabled: boolean
-    news_confidence_threshold: number
-    twitter_confidence_threshold: number
-    max_interrupt_position_pct: number
+  source_list: {
+    tier1: SourceTier
+    tier2: SourceTier
   }
+}
+
+export interface SourceConfig {
+  name: string
+  type: 'influencer'
+  domain?: string
+  crypto_only?: boolean
+}
+
+export interface SourceTier {
+  label: string
+  check_interval_seconds: number
+  sources: SourceConfig[]
+}
+
+export interface EntryStatus {
+  ema_200?: number
+  ema_20?: number
+  rsi?: number
+  current_price?: number
+  reasons?: string[]
+  action?: string
+}
+
+export interface TargetCoin {
+  rank: number
+  symbol: string
+  trade_price: number
+  acc_trade_price_1h: number
+  acc_trade_price_24h: number
+  signed_change_rate: number
+  is_target: boolean
+  entry_status?: EntryStatus | null
 }
 
 export interface SystemStatus {
@@ -79,11 +165,15 @@ export interface SystemStatus {
     positions_count: number
     positions: Position[]
     rules_version: string
+    target_symbols: string[]
+    entry_paused: boolean
+    entry_pause_remaining_seconds: number
   }
   news_monitor: {
     running: boolean
-    interval_minutes: number
+    interval_seconds: number
     last_signals_count: number
+    last_check_time: string | null
   }
   twitter_monitor: {
     running: boolean
@@ -96,9 +186,11 @@ export interface SystemStatus {
 export interface Settings {
   upbit_connected: boolean
   gemini_connected: boolean
-  news_interval_minutes: number
+  news_interval_seconds: number
   twitter_accounts: string[]
   twitter_interval_seconds: number
+  news_monitor_running: boolean
+  twitter_monitor_running: boolean
   system_status: SystemStatus
 }
 

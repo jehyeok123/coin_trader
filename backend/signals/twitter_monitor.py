@@ -14,7 +14,7 @@ class TwitterMonitor(BaseSignalSource):
     """
     트위터(X) 모니터링 시그널 소스.
     RSS/Nitter를 통해 특정 계정의 새 글을 폴링하고,
-    Gemini API로 분석하여 매매 시그널을 생성합니다.
+    Gemini API로 키워드 점수 분석하여 매매 시그널을 생성합니다.
     """
 
     source_name = "twitter"
@@ -31,11 +31,9 @@ class TwitterMonitor(BaseSignalSource):
         self._nitter_url = settings.nitter_instance_url.rstrip("/")
 
     def on_signal(self, callback):
-        """시그널 발생 시 호출될 콜백 등록"""
         self._callbacks.append(callback)
 
     def set_accounts(self, accounts: list[str]):
-        """감시 대상 계정 목록 변경"""
         self._accounts = accounts
         logger.info(f"트위터 감시 계정 변경: {accounts}")
 
@@ -78,42 +76,76 @@ class TwitterMonitor(BaseSignalSource):
             if not new_entries:
                 continue
 
-            # 새 글을 Gemini로 분석
             for entry in new_entries:
                 self._seen_ids.add(entry["id"])
                 content = (
-                    f"트위터 계정 @{account}의 새 글:\n"
-                    f"내용: {entry['content']}\n"
-                    f"게시 시간: {entry['published']}"
+                    f"Tweet from @{account}:\n"
+                    f"{entry['content']}\n"
+                    f"Published: {entry['published']}"
                 )
 
-                raw_signals = await self._analyzer.analyze(content)
-                for s in raw_signals:
-                    signal = Signal(
-                        source="twitter",
-                        action=s.get("action", "hold"),
-                        symbol=s.get("symbol"),
-                        confidence=float(s.get("confidence", 0)),
-                        summary=f"@{account}: {s.get('summary', '')}",
-                        raw_data=str(entry),
-                    )
-                    all_signals.append(signal)
+                score_result = await self._analyzer.analyze(content)
+                if score_result is None:
+                    continue
 
-                    # 즉시 콜백 (인터럽트 트레이딩)
-                    if signal.action != "hold":
-                        for cb in self._callbacks:
-                            try:
-                                await cb(signal)
-                            except Exception as e:
-                                logger.error(f"트위터 시그널 콜백 오류: {e}")
+                signal = self._score_to_signal(score_result, account, entry.get("link", ""))
+                if signal is None:
+                    continue
+
+                all_signals.append(signal)
+
+                if signal.action != "hold":
+                    for cb in self._callbacks:
+                        try:
+                            await cb(signal)
+                        except Exception as e:
+                            logger.error(f"트위터 시그널 콜백 오류: {e}")
 
         self._last_signals = all_signals
         if all_signals:
             logger.info(f"트위터 모니터링: {len(all_signals)}개 시그널 감지")
         return all_signals
 
+    @staticmethod
+    def _score_to_signal(score_result: dict, account: str, url: str = "") -> Signal | None:
+        """점수 결과를 Signal 객체로 변환"""
+        ticker = score_result.get("ticker")
+        score = int(score_result.get("score", 0))
+        reason = score_result.get("reason", "")
+        scope = score_result.get("scope", "ticker")
+
+        if score == 0:
+            return None
+
+        if scope == "macro":
+            symbol = None
+        else:
+            if ticker is None:
+                return None
+            symbol = f"KRW-{ticker}" if not ticker.startswith("KRW-") else ticker
+
+        if score >= 4:
+            action = "buy"
+        elif score <= -4:
+            action = "sell"
+        else:
+            action = "hold"
+
+        confidence = min(abs(score) / 5.0, 1.0)
+
+        return Signal(
+            source="twitter",
+            action=action,
+            symbol=symbol,
+            confidence=confidence,
+            score=score,
+            scope=scope,
+            summary=f"@{account} [{scope}|score:{score:+d}] {reason}",
+            url=url,
+            raw_data=str(score_result),
+        )
+
     async def _monitor_loop(self):
-        """주기적으로 트위터를 확인하는 루프"""
         while self._running:
             try:
                 await self.check()
@@ -126,9 +158,7 @@ class TwitterMonitor(BaseSignalSource):
             return
         self._running = True
         self._task = asyncio.create_task(self._monitor_loop())
-        logger.info(
-            f"트위터 모니터링 시작 (계정: {self._accounts}, 간격: {self._interval}초)"
-        )
+        logger.info(f"트위터 모니터링 시작 (계정: {self._accounts}, 간격: {self._interval}초)")
 
     async def stop(self):
         self._running = False

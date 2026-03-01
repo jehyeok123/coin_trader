@@ -19,7 +19,7 @@ export default function Header() {
   return (
     <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-4">
-        <h1 className="text-xl font-bold text-primary-400">Coin Trader</h1>
+        <h1 className="text-xl font-bold text-primary-400">Pooh Trader</h1>
         <span className="text-sm text-gray-400">자동 매매 시스템</span>
       </div>
       <div className="flex items-center gap-4">

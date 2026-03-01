@@ -37,9 +37,9 @@ class Settings(BaseSettings):
     )
 
     # Signal Monitoring Intervals
-    news_check_interval_minutes: int = Field(
-        default=5,
-        alias="NEWS_CHECK_INTERVAL_MINUTES",
+    news_check_interval_seconds: int = Field(
+        default=30,
+        alias="NEWS_CHECK_INTERVAL_SECONDS",
     )
     twitter_check_interval_seconds: int = Field(
         default=60,

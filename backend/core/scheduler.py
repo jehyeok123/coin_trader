@@ -39,8 +39,8 @@ class TradingScheduler:
         logger.info("전체 트레이딩 시스템 시작")
         await self._engine.start()
         await self._news_monitor.start()
-        await self._twitter_monitor.start()
-        logger.info("전체 트레이딩 시스템 시작 완료")
+        # 트위터 모니터는 기본 OFF (설정에서 수동 ON 가능)
+        logger.info("전체 트레이딩 시스템 시작 완료 (트위터 모니터: OFF)")
 
     async def stop_all(self):
         """모든 서비스 중지"""
@@ -60,23 +60,39 @@ class TradingScheduler:
         """매매 엔진만 중지"""
         await self._engine.stop()
 
-    def set_news_interval(self, minutes: int):
+    def set_news_interval(self, seconds: int):
         """뉴스 모니터링 간격 변경"""
-        self._news_monitor.set_interval(minutes)
+        self._news_monitor.set_interval(seconds)
 
     def set_twitter_accounts(self, accounts: list[str]):
         """트위터 감시 계정 변경"""
         self._twitter_monitor.set_accounts(accounts)
 
+    async def toggle_news_monitor(self, enabled: bool):
+        """뉴스 모니터 on/off"""
+        if enabled and not self._news_monitor._running:
+            await self._news_monitor.start()
+        elif not enabled and self._news_monitor._running:
+            await self._news_monitor.stop()
+
+    async def toggle_twitter_monitor(self, enabled: bool):
+        """트위터 모니터 on/off"""
+        if enabled and not self._twitter_monitor._running:
+            await self._twitter_monitor.start()
+        elif not enabled and self._twitter_monitor._running:
+            await self._twitter_monitor.stop()
+
     async def get_status(self) -> dict:
         """전체 시스템 상태 조회"""
         engine_status = await self._engine.get_status()
+
         return {
             "engine": engine_status,
             "news_monitor": {
                 "running": self._news_monitor._running,
-                "interval_minutes": self._news_monitor._interval // 60,
+                "interval_seconds": self._news_monitor._interval,
                 "last_signals_count": len(self._news_monitor.last_signals),
+                "last_check_time": self._news_monitor.last_check_time.isoformat() if self._news_monitor.last_check_time else None,
             },
             "twitter_monitor": {
                 "running": self._twitter_monitor._running,

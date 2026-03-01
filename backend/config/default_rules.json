@@ -1,61 +1,75 @@
 {
-  "version": "1.0",
-  "description": "기본 단타 매매 규칙 - 스켈레톤",
+  "version": "2.2",
+  "description": "15분봉 눌림목 전략 + 키워드 점수 이벤트 매매 + 매크로 킬스위치 + 소스 티어",
   "trading": {
-    "stop_loss_pct": 3.0,
-    "take_profit_pct": 5.0,
-    "trailing_stop_pct": 1.5,
     "max_position_size_pct": 10.0,
     "max_concurrent_positions": 5,
     "min_order_amount_krw": 5000,
-    "cooldown_seconds": 60,
+    "cooldown_seconds": 5,
+    "position_check_interval_seconds": 1,
     "sell_lock_before_date": "2026-02-27"
   },
-  "indicators": {
-    "rsi": {
-      "enabled": true,
-      "period": 14,
-      "oversold": 30,
-      "overbought": 70
+  "target_coins": {
+    "top_n": 10,
+    "refresh_interval_seconds": 60
+  },
+  "technical_strategy": {
+    "candle_interval": "15m",
+    "candle_count": 200,
+    "entry": {
+      "ema_long": 200,
+      "ema_short": 20,
+      "rsi_period": 14,
+      "rsi_min": 50,
+      "rsi_max": 65
     },
-    "macd": {
-      "enabled": false,
-      "fast_period": 12,
-      "slow_period": 26,
-      "signal_period": 9
-    },
-    "volume_spike": {
-      "enabled": true,
-      "threshold_multiplier": 2.0,
-      "lookback_periods": 20
-    },
-    "bollinger_bands": {
-      "enabled": false,
-      "period": 20,
-      "std_dev": 2.0
-    },
-    "moving_average": {
-      "enabled": false,
-      "short_period": 5,
-      "long_period": 20,
-      "type": "EMA"
+    "exit": {
+      "stop_loss_pct": 1.0,
+      "tp1_pct": 1.5,
+      "tp1_sell_ratio": 0.5,
+      "moonbag_trail_pct": 1.0
     }
   },
+  "event_strategy": {
+    "buy_score_threshold": 5,
+    "sell_score_threshold": -5,
+    "non_target_buy_score_threshold": 25,
+    "non_target_sell_score_threshold": -25,
+    "buy_position_size_pct": 10.0,
+    "exit": {
+      "stop_loss_pct": 2.0,
+      "tp1_pct": 3.0,
+      "tp1_sell_ratio": 0.5,
+      "moonbag_trail_pct": 1.0
+    }
+  },
+  "macro_strategy": {
+    "buy_score_threshold": 4,
+    "sell_score_threshold": -4,
+    "buy_position_size_pct": 20.0,
+    "buy_symbol": "KRW-BTC",
+    "pause_duration_seconds": 7200
+  },
   "filters": {
-    "min_volume_24h_krw": 1000000000,
-    "min_price_krw": 100,
-    "blacklist": [],
+    "min_price_krw": 1000,
+    "blacklist": ["KRW-BTC"],
     "whitelist": []
   },
-  "signal_weights": {
-    "technical": 0.6,
-    "news": 0.3,
-    "twitter": 0.1
-  },
-  "interrupt": {
-    "enabled": true,
-    "news_confidence_threshold": 0.8,
-    "twitter_confidence_threshold": 0.9,
-    "max_interrupt_position_pct": 5.0
+  "source_list": {
+    "tier1": {
+      "label": "Tier 1 - 즉시 대응",
+      "check_interval_seconds": 30,
+      "sources": [
+        {"name": "elonmusk", "type": "influencer", "crypto_only": true}
+      ]
+    },
+    "tier2": {
+      "label": "Tier 2 - 주요 동향",
+      "check_interval_seconds": 120,
+      "sources": [
+        {"name": "VitalikButerin", "type": "influencer"},
+        {"name": "whale_alert", "type": "influencer"}
+      ]
+    }
   }
 }

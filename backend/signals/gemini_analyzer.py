@@ -5,31 +5,66 @@ from backend.config import settings
 from backend.utils.logger import logger
 
 
-ANALYSIS_PROMPT = """당신은 암호화폐 시장 분석 전문가입니다.
-아래 뉴스/소셜미디어 내용을 분석하여 매매 시그널을 JSON 형태로 반환해주세요.
+# 사용자 지정 키워드 점수 기반 시스템 프롬프트 (영어 고정)
+SYSTEM_PROMPT = (
+    "You are an elite cryptocurrency quantitative analyst. "
+    "Your task is to analyze incoming news or tweets and calculate a "
+    "'Sentiment Score' strictly based on the provided keyword weights.\n\n"
+    "[Step 1: Determine Scope]\n"
+    "Determine if the news is about a specific coin ('scope': 'ticker') "
+    "or the broad macroeconomic/geopolitical market ('scope': 'macro').\n\n"
+    "[Coin-Specific Keyword Scoring Dictionary]\n"
+    "Positive:\n"
+    " * 'Listing', 'List': +5 (Add +5 more if Binance, Upbit, or Coinbase is mentioned)\n"
+    " * 'Approved', 'Approve', 'Acquisition', 'Acquired': +4\n"
+    " * 'Partnership', 'Partner', 'Mainnet Launch': +3\n"
+    " * 'Burn': +2\n\n"
+    "Negative:\n"
+    " * 'Hack', 'Hacked', 'Exploit', 'Delist', 'Delisting', 'Bankrupt': -5\n"
+    " * 'SEC', 'Lawsuit', 'Sued': -4\n"
+    " * 'Delay', 'Halted': -2\n\n"
+    "[Macro Keyword Scoring Dictionary]\n"
+    "Positive:\n"
+    " * 'Rate Cut': +5\n"
+    " * 'Lower CPI': +5\n"
+    " * 'QE' (Quantitative Easing): +5\n"
+    " * 'Stimulus': +5\n\n"
+    "Negative:\n"
+    " * 'Rate Hike': -5\n"
+    " * 'Higher CPI': -5\n"
+    " * 'War': -5\n"
+    " * 'Invasion': -5\n"
+    " * 'Missile': -5\n"
+    " * 'Recession': -5\n"
+    " * 'Emergency': -5\n\n"
+    "[Instructions]\n"
+    " * If the news is about a specific cryptocurrency, set scope to 'ticker' "
+    "and identify the primary ticker (e.g., BTC, XRP, DOGE).\n"
+    " * If the news is about macroeconomic or geopolitical events affecting "
+    "the entire market, set scope to 'macro' and ticker to 'ALL'.\n"
+    " * Calculate the total sentiment score using ONLY the matching Keyword "
+    "Scoring Dictionary above. If no keywords match, the score is 0.\n"
+    " * Return the result STRICTLY as a JSON object in the following format, "
+    "with no markdown formatting or additional text:\n"
+    '   {"scope": "ticker", "ticker": "TICKER_NAME", "score": CALCULATED_SCORE, '
+    '"reason": "매칭된 키워드와 뉴스 내용을 한국어로 간단히 요약"}'
+)
 
-## 분석 내용:
-{content}
+ANALYZE_PROMPT = "Analyze the following text:\n\n{content}"
 
-## 응답 형식 (JSON):
-{{
-  "signals": [
-    {{
-      "action": "buy" | "sell" | "hold",
-      "symbol": "KRW-BTC 형태의 업비트 심볼 (확실하지 않으면 null)",
-      "confidence": 0.0 ~ 1.0 사이의 신뢰도,
-      "summary": "1줄 요약 (한국어)"
-    }}
-  ]
-}}
-
-## 규칙:
-1. 확실하지 않은 시그널은 confidence를 낮게 설정하세요.
-2. 명확한 근거가 없으면 "hold"로 반환하세요.
-3. summary는 반드시 1줄로 요약하세요.
-4. 심볼은 업비트 형식(KRW-BTC, KRW-ETH 등)으로 반환하세요.
-5. JSON만 반환하세요. 다른 텍스트는 포함하지 마세요.
-"""
+SEARCH_PROMPT = (
+    "Current UTC time: {current_time}\n"
+    "Time window: {time_from} ~ {time_to} (only consider news within this window)\n\n"
+    "Search for the latest cryptocurrency breaking news and events "
+    "that occurred within the time window above.\n\n"
+    "Query: {query}\n\n"
+    "IMPORTANT RULES:\n"
+    "1. Only consider news published within the specified time window.\n"
+    "2. If there is impactful news, analyze it and return a JSON with ticker, score, and reason.\n"
+    "3. If there is NO relevant news within the time window, you MUST return:\n"
+    '   {{"scope": "none", "ticker": "NONE", "score": 0, "reason": "해당 시간 동안 주요 뉴스 없음"}}\n'
+    "4. Return STRICTLY a JSON object, no markdown or extra text."
+)
 
 # 모델 우선순위: 최신 모델 먼저 시도, 할당량 초과 시 다음 모델로 fallback
 MODEL_PRIORITY = [
@@ -39,7 +74,7 @@ MODEL_PRIORITY = [
 
 
 class GeminiAnalyzer:
-    """Google Gemini API를 활용한 뉴스/소셜미디어 분석기 (자동 모델 fallback)"""
+    """Google Gemini API를 활용한 뉴스/소셜미디어 키워드 점수 분석기"""
 
     def __init__(self):
         self._models: list[genai.GenerativeModel] = []
@@ -49,7 +84,10 @@ class GeminiAnalyzer:
         if settings.gemini_api_key:
             genai.configure(api_key=settings.gemini_api_key)
             for name in MODEL_PRIORITY:
-                self._models.append(genai.GenerativeModel(name))
+                self._models.append(genai.GenerativeModel(
+                    name,
+                    system_instruction=SYSTEM_PROMPT,
+                ))
             self._active_model_name = MODEL_PRIORITY[0]
             self._configured = True
             logger.info(f"Gemini 분석기 초기화 완료 (모델: {', '.join(MODEL_PRIORITY)})")
@@ -85,69 +123,98 @@ class GeminiAnalyzer:
                     logger.warning(f"Gemini {model_name} {reason}, 다음 모델로 전환 시도...")
                     continue
                 else:
-                    # 할당량/모델 문제가 아닌 다른 에러는 즉시 실패
                     raise
 
-        # 모든 모델 실패
         if last_error:
             raise last_error
         return ""
 
-    async def analyze(self, content: str) -> list[dict]:
-        """텍스트 내용을 분석하여 매매 시그널 반환."""
+    @staticmethod
+    def _parse_json_response(text: str) -> dict | None:
+        """Gemini 응답에서 JSON 추출"""
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
         try:
-            prompt = ANALYSIS_PROMPT.format(content=content)
+            return json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start >= 0 and end > start:
+                try:
+                    return json.loads(text[start:end])
+                except json.JSONDecodeError:
+                    pass
+            return None
+
+    async def analyze(self, content: str) -> dict | None:
+        """텍스트를 분석하여 키워드 기반 점수 반환.
+
+        Returns:
+            dict: {"ticker": "BTC", "score": 5, "reason": "..."} or None
+        """
+        try:
+            prompt = ANALYZE_PROMPT.format(content=content)
             text = await self._call_with_fallback(prompt)
             if not text:
-                return []
+                return None
 
-            # 코드 블록 제거
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
+            result = self._parse_json_response(text)
+            if result is None:
+                logger.error(f"Gemini 응답 JSON 파싱 실패: {text[:200]}")
+                return None
 
-            result = json.loads(text)
-            signals = result.get("signals", [])
-            logger.info(f"Gemini 분석 완료 ({self._active_model_name}): {len(signals)}개 시그널")
-            return signals
+            logger.info(
+                f"Gemini 점수 분석 ({self._active_model_name}): "
+                f"ticker={result.get('ticker')}, score={result.get('score')}, "
+                f"reason={result.get('reason')}"
+            )
+            return result
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Gemini 응답 JSON 파싱 실패: {e}")
-            return []
         except Exception as e:
             logger.error(f"Gemini 분석 실패: {e}")
-            return []
+            return None
 
-    async def search_and_analyze(self, query: str) -> list[dict]:
-        """Gemini를 활용하여 최신 뉴스를 검색하고 분석."""
+    async def search_and_analyze(
+        self, query: str, time_from: str = "", time_to: str = ""
+    ) -> dict | None:
+        """Gemini를 활용하여 최신 뉴스를 검색하고 점수 분석.
+
+        Args:
+            query: 검색 쿼리
+            time_from: 검색 시작 시간 (ISO format)
+            time_to: 검색 종료 시간 (ISO format)
+
+        Returns:
+            dict: {"ticker": "BTC", "score": 5, "reason": "..."} or None
+        """
         try:
-            search_prompt = (
-                f"다음 주제에 대한 최신 암호화폐 관련 뉴스를 검색하고 분석해주세요:\n"
-                f"주제: {query}\n\n"
-                f"최근 뉴스와 커뮤니티 반응을 바탕으로 매매 시그널을 "
-                f"아래 JSON 형식으로 반환해주세요:\n\n"
-                f'{{"signals": [{{"action": "buy|sell|hold", '
-                f'"symbol": "KRW-BTC 형태 또는 null", '
-                f'"confidence": 0.0~1.0, '
-                f'"summary": "1줄 요약"}}]}}\n\n'
-                f"JSON만 반환하세요."
+            from datetime import datetime as dt
+            now = dt.utcnow()
+            prompt = SEARCH_PROMPT.format(
+                query=query,
+                current_time=time_to or now.strftime("%Y-%m-%d %H:%M UTC"),
+                time_from=time_from or now.strftime("%Y-%m-%d %H:%M UTC"),
+                time_to=time_to or now.strftime("%Y-%m-%d %H:%M UTC"),
             )
-
-            text = await self._call_with_fallback(search_prompt)
+            text = await self._call_with_fallback(prompt)
             if not text:
-                return []
+                return None
 
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
+            result = self._parse_json_response(text)
+            if result is None:
+                logger.error(f"Gemini 검색 응답 JSON 파싱 실패: {text[:200]}")
+                return None
 
-            result = json.loads(text)
-            return result.get("signals", [])
+            logger.info(
+                f"Gemini 검색 분석 ({self._active_model_name}): "
+                f"ticker={result.get('ticker')}, score={result.get('score')}"
+            )
+            return result
 
         except Exception as e:
             logger.error(f"Gemini 검색 분석 실패: {e}")
-            return []
+            return None

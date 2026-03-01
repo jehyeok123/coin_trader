@@ -81,6 +81,11 @@ class BaseBroker(ABC):
         ...
 
     @abstractmethod
+    async def get_full_tickers(self, symbols: list[str] | None = None) -> list[dict]:
+        """여러 종목의 전체 시세 데이터 일괄 조회 (거래대금 포함)"""
+        ...
+
+    @abstractmethod
     async def get_orderbook(self, symbol: str) -> dict:
         """호가창 조회"""
         ...
